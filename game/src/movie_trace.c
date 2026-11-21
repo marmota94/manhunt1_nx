@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <ctype.h>
 #include <stdatomic.h>
 #include <time.h>
@@ -62,6 +63,27 @@ NTSTATUS __stdcall __wrap_xbox_NtCreateFile(
                 (unsigned long long)ts.tv_sec * 1000ull + (unsigned long long)ts.tv_nsec / 1000000ull,
                 n, name, (unsigned)DesiredAccess, (unsigned)CreateDisposition,
                 (unsigned)CreateOptions, (unsigned)st);
+    }
+    /* [MH-LEVEL] <folder>: the first open under a new levels\<folder>\ other than
+     * global, so a run's log shows which levels were loaded (tools/emu_run.py). */
+    {
+        static char last[48];
+        const char *p = name;
+        while (*p && !(strncasecmp(p, "levels\\", 7) == 0 && (p == name || p[-1] == '\\'))) p++;
+        if (*p) {
+            p += 7;
+            size_t k = 0;
+            char dir[48];
+            while (p[k] && p[k] != '\\' && k < sizeof dir - 1) {
+                dir[k] = (char)tolower((unsigned char)p[k]);
+                k++;
+            }
+            dir[k] = 0;
+            if (p[k] == '\\' && k && strcmp(dir, "global") && strcmp(dir, last)) {
+                memcpy(last, dir, k + 1);
+                fprintf(stderr, "[MH-LEVEL] %s\n", dir);
+            }
+        }
     }
     return st;
 }

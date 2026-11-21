@@ -18,7 +18,7 @@
 
 #include "pad.h"
 
-#define MAX_STEPS 128
+#define MAX_STEPS 512   /* a multi-level emulator run (tests/emu/levels.pad) needs a few hundred */
 
 typedef struct {
     unsigned long at, hold;

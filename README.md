@@ -64,6 +64,8 @@ This code merged without the independent reviews the project had planned, by the
 - Pad latching so short taps reach the title, Switch-to-Xbox button mapping, and Rockstar's own developer menu on L3+R3 (`MANHUNT_DEVMENU=1`).
 - An on-screen frame counter (`MANHUNT_FPS_OVERLAY=1`) and a frame-rate log (`RECOMP_FPS_LOG=1`).
 - Focused tests under `tests/` for the Horizon layer, renderer, audio, widescreen, SD layout and input. Several include negative controls that prove the test fails when the code is broken.
+- An emulator test flow for Ryubing (`tools/emu_run.py`, `tests/emu/`). It runs the NRO with a scripted pad and reports FPS, error kinds, the levels loaded and the frames, against an earlier run. Tiers: a 4-minute smoke run, one level from a save snapshot, and 12 levels in a row through Rockstar's dev menu. Emulator results say nothing about console speed. Details: `reports/EMULATOR_TESTS_2026-11-21.md`.
+- A console A/B tool (`tools/console_ab.py`): an SD folder with two NROs that play the same script by themselves and keep separate logs, and a comparison of the two logs.
 
 ## Build
 
@@ -81,7 +83,7 @@ docker build -t manhunt-recompiler:xboxrecomp-f0f8a46 infra/recompiler
 MSYS_NO_PATHCONV=1 scripts/game-build.sh switch
 ```
 
-The output is `game/build/switch/manhunt.nro`. Leave out `MSYS_NO_PATHCONV=1` on Linux or macOS. A clean run of this script against this exact commit is UNVERIFIED: the last console builds were incremental.
+The output is `game/build/switch/manhunt.nro`. Leave out `MSYS_NO_PATHCONV=1` on Linux or macOS. A clean run of this script from a fresh clone of v1.0.0 (6f6c837) worked on Windows with Docker Desktop on 2026-11-20, in about 10 minutes with `CPUS=4`. `CPUS` defaults to every core; with a small Docker VM (7.3 GB there), set it lower.
 
 The toolchain image is pinned: `devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282`.
 
@@ -149,7 +151,7 @@ Set these in `manhunt.env`, one per line.
 | `MANHUNT_QUIT_COMBO` | on | Hold ZL + ZR + Plus + Minus for 1.5 s to leave the game; `0` turns it off. See below |
 | `MANHUNT_QUIT_HOLD_MS` | 1500 | How long to hold the quit combo (500 or more) |
 | `MANHUNT_QUIT_MODE` | `restart` | How the quit combo ends the game: `restart`, `return` or `process` |
-| `MANHUNT_LOG_FILE` | off | Path of a log file on the card |
+| `MANHUNT_LOG_FILE` | off | Path of a log file on the card. `{nro}` in it becomes the running NRO's file name, so two builds on one card keep separate logs |
 | `MANHUNT_SD_BASE` | `/switch/manhunt1_nx` | Application folder; `game/` is appended for game data |
 
 Diagnostic settings, for test runs only:
@@ -157,10 +159,11 @@ Diagnostic settings, for test runs only:
 | Key | Default | Effect |
 |---|---|---|
 | `RECOMP_GL_DUMP` | off | `<path prefix>,<N>` saves every Nth frame as a BMP |
+| `RECOMP_GL_DUMP_READ` | direct | `wide` reads each dumped frame through a target four times as wide. Ryubing returns only the first quarter of each row from any readback; this gets the whole frame there and the same frame elsewhere |
 | `MANHUNT_GL_CLIP_CLAMP` | `0` | `1` clamps clip depth per vertex (the old form); `alt` alternates linear and clamped every frame, and with `RECOMP_GL_DUMP` saves each pair |
 | `MANHUNT_GL_FF_COLMAT` | on | `0` restores the old fixed-function base colour (scene ambient alone) |
 | `MANHUNT_CONTIG_TRACE` | off | `1` logs contiguous-memory blocks of 64 KB or more with the guest caller, and an arena summary every 10 s and at each refused request |
-| `MANHUNT_PAD_SCRIPT` | off | Scripted pad input, `<ms>:<button>[+<button>][:<hold_ms>],...` (`game/src/pad_script.c`) |
+| `MANHUNT_PAD_SCRIPT` | off | Scripted pad input, `<ms>:<button>[+<button>][:<hold_ms>],...`, up to 512 steps (`game/src/pad_script.c`) |
 | `MANHUNT_AUTO_EXIT_SECS` | off | Ends the run after N seconds |
 
 **Quitting.** Hold ZL + ZR + Plus + Minus for 1.5 seconds. The aim is to leave the game and land back in Sphaira instead of ending the whole takeover session, as HOME then Close Software does, which also takes Sphaira's FTP and netloader away. `MANHUNT_QUIT_MODE` picks the method: `restart` (default) restarts the program, which under the homebrew loader's title takeover reloads the menu; `return` exits the way a normal homebrew app does; `process` ends the process and returns to the Home menu. Which of them lands in Sphaira is UNVERIFIED on the console. Each step is logged as `[MH-EXIT]`.
@@ -190,8 +193,8 @@ The renderer does not load upscaled textures yet. Doing that on the console is l
 | `game/patches/xboxrecomp/` | Patches applied to the pinned runtime |
 | `infra/` | Container definitions |
 | `scripts/` | Build, emulator and console helpers |
-| `tools/` | Offline texture extraction and upscaling helpers |
-| `tests/` | Focused tests and proofs |
+| `tools/` | Offline texture extraction and upscaling helpers, the emulator runner and the console A/B tool |
+| `tests/` | Focused tests and proofs; `tests/emu/` holds the emulator scripts and profile |
 | `analysis/` | Executable analysis helpers |
 | `reports/ASSET_MANIFEST.sha256` | Hashes of the expected input files, used by `scripts/switch-boot-proof.sh` |
 

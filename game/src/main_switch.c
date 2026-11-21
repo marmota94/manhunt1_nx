@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/iosupport.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -248,11 +249,22 @@ static void log_init(void)
 }
 
 /* Called once after config_init(): opens MANHUNT_LOG_FILE if set. The path
- * must start with sdmc:/. The result is logged after the lock is released
- * (printf takes it, and it is not recursive). */
+ * must start with sdmc:/. "{nro}" in it is replaced by the running NRO's file
+ * name without ".nro" (from argv[0]), so two builds on one card keep separate
+ * logs with one manhunt.env (an A/B run). The result is logged after the lock
+ * is released (printf takes it, and it is not recursive). */
+static const char *s_nro_name = "manhunt";
+
 static void log_file_init(void)
 {
-    const char *path = getenv("MANHUNT_LOG_FILE");
+    const char *raw = getenv("MANHUNT_LOG_FILE");
+    static char expanded[256];
+    const char *path = raw;
+    const char *at = raw ? strstr(raw, "{nro}") : NULL;
+    if (at) {
+        snprintf(expanded, sizeof expanded, "%.*s%s%s", (int)(at - raw), raw, s_nro_name, at + 5);
+        path = expanded;
+    }
     const char *sync = getenv("MANHUNT_LOG_SYNC");
     int want = path && *path;
 
@@ -1189,7 +1201,19 @@ int main(int argc, char **argv)
     pthread_attr_t attr;
 
     log_init();
-    printf("[MH-BOOT] start (Horizon) game_dir=%s\n", GAME_DIR);
+    if (argc > 0 && argv[0] && *argv[0]) {
+        /* "sdmc:/switch/manhunt1_nx/manhunt.nro" -> "manhunt" (MANHUNT_LOG_FILE's {nro}) */
+        static char name[64];
+        const char *base = strrchr(argv[0], '/');
+        base = base ? base + 1 : argv[0];
+        snprintf(name, sizeof name, "%s", base);
+        char *dot = strrchr(name, '.');
+        if (dot && !strcasecmp(dot, ".nro"))
+            *dot = 0;
+        if (*name)
+            s_nro_name = name;
+    }
+    printf("[MH-BOOT] start (Horizon) game_dir=%s nro=%s\n", GAME_DIR, s_nro_name);
     config_init();
     /* KEY=VALUE arguments override manhunt.env: "nxlink manhunt.nro KEY=VALUE ..."
      * runs a test configuration without touching the card. */

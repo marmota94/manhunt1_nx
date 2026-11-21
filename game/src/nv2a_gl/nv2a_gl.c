@@ -4700,6 +4700,65 @@ static void gl_clear_work(const Nv2aSurface *sf, const Nv2aRenderState *rs,
     glDisable(GL_SCISSOR_TEST);
 }
 
+/* RECOMP_GL_DUMP_READ=wide: read a dumped frame through a 4w-wide target.
+ * Ryubing 1.3.3 returns only the first w/4 pixels of each row from any
+ * readback of a w-pixel-wide surface (width taken as bytes; the window shows
+ * the full frame; GL_BGRA, GL_RGBA and a pixel-pack buffer all cut at w/4,
+ * 2026-11-20). Unset: the original glReadPixels. Diagnosis only. */
+static void dump_read(GLuint fbo, uint32_t w, uint32_t h, uint8_t *dst)
+{
+    static int mode = -1;
+    if (mode < 0) {
+        const char *e = getenv("RECOMP_GL_DUMP_READ");
+        mode = e && !strcmp(e, "wide");
+        fprintf(stderr, "[MH-GL] dump read %s\n", mode ? "wide" : "direct");
+    }
+    const size_t need = (size_t)w * h * 4;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    if (mode) {
+        /* The frame is blitted into the left quarter of a 4w-wide target and the
+         * whole target is read: a reader that keeps only the first quarter of
+         * each row (Ryubing) still returns the full frame, and a correct one
+         * returns it too. Then the rows are compacted to w pixels. */
+        static GLuint wfbo, wtex;
+        static uint32_t ww, wh;
+        static uint8_t *wide;
+        if (ww != w * 4 || wh != h) {
+            if (wtex) glDeleteTextures(1, &wtex);
+            if (wfbo) glDeleteFramebuffers(1, &wfbo);
+            free(wide);
+            ww = w * 4;
+            wh = h;
+            wide = (uint8_t *)malloc((size_t)ww * wh * 4);
+            glGenTextures(1, &wtex);
+            glBindTexture(GL_TEXTURE_2D, wtex);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, (GLsizei)ww, (GLsizei)wh, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+            tex_bind_forget();
+            glGenFramebuffers(1, &wfbo);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, wfbo);
+            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, wtex, 0);
+        }
+        if (!wide) {
+            memset(dst, 0, need);
+            return;
+        }
+        glDisable(GL_SCISSOR_TEST);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, wfbo);
+        glBlitFramebuffer(0, 0, (GLint)w, (GLint)h, 0, 0, (GLint)w, (GLint)h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, wfbo);
+        glReadPixels(0, 0, (GLsizei)ww, (GLsizei)wh, GL_BGRA, GL_UNSIGNED_BYTE, wide);
+        for (uint32_t y = 0; y < h; y++)
+            memcpy(dst + (size_t)y * w * 4, wide + (size_t)y * ww * 4, (size_t)w * 4);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    } else {
+        glReadPixels(0, 0, (GLsizei)w, (GLsizei)h, GL_BGRA, GL_UNSIGNED_BYTE, dst);
+    }
+    gl_check("frame dump read");
+}
+
 static void dump_bmp(const char *path, const uint8_t *bgra, uint32_t w, uint32_t h)
 {
     FILE *f = fopen(path, "wb");
@@ -4956,10 +5015,7 @@ static void gl_flip_work(void)
         }
         if (pix) {
             char path[320];
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, s->fbo);
-            glPixelStorei(GL_PACK_ALIGNMENT, 4);
-            glReadPixels(0, 0, (GLsizei)s->pw, (GLsizei)s->ph, GL_BGRA,
-                         GL_UNSIGNED_BYTE, pix);
+            dump_read(s->fbo, s->pw, s->ph, pix);
             snprintf(path, sizeof path, "%s%05u.bmp", dump_prefix, s_frame);
             dump_bmp(path, pix, s->pw, s->ph);
         }
