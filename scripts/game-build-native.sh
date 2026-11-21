@@ -60,6 +60,8 @@ if [ ! -f "$G/gen/recomp_dispatch.c" ]; then
   echo "$manual_key" > "$G/gen/.manual.sha256"
 fi
 
+python3 -I "$root/scripts/post-lift.py" "$G/gen"
+
 # 5. Switch NRO (optional icon: game/icon.jpg -> 256x256 JPEG, macOS sips)
 rm -f "$G/icon256.jpg"
 if [ -f "$root/game/icon.jpg" ] && command -v sips >/dev/null 2>&1; then

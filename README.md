@@ -33,6 +33,7 @@ This code merged without the independent reviews the project had planned, by the
 - Maintained 40 patches to that runtime in `game/patches/xboxrecomp/`: the Horizon (Switch) port, memory layout, a raw-batch renderer interface, audio register routing, and GPU completion handling.
 - Implemented the Horizon layer in `game/src/`: memory, threads, time, files, the SD layout, a crash handler with a backtrace, a watchdog, and log output to the card, TCP or nxlink.
 - Replaced the fence wait the title needs (`game/src/d3d_fence.c`).
+- A post-lift step (`scripts/post-lift.py`) makes each lifted function read the guest memory base once and reach the guest's x86 registers through one pointer into a single thread-local block (`game/src/guest_regs.S`, patch 0042), instead of reloading the base before every access and finding each register through its own thread-local. The Switch code is 12.7% smaller (25.85 to 22.56 MB); console speed is UNVERIFIED. `MANHUNT_MEMBASE_LOCAL=0` and `MANHUNT_GUEST_REGS=0` for `scripts/game-build.sh` leave either edit out. Details: `reports/CPU_GUEST_REGS_2026-11-21.md`.
 
 ### Graphics
 
