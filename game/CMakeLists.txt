@@ -97,6 +97,15 @@ if(NINTENDO_SWITCH)
     # MANHUNT_TRANSFORM_TRACE: first invalid SetTransform source (src/transform_trace.c).
     target_link_options(manhunt PRIVATE -Wl,--wrap=sub_0028DA30)
     set_source_files_properties(${MANHUNT_RUNTIME_SOURCES} PROPERTIES COMPILE_OPTIONS "-O2;-w")
+    # MANHUNT_APU_O3: the audio emulator's voice path at -O3, which vectorises 14 loops instead of 6
+    # (the mix-bin loop and the HRTF convolution among them). No -ffast-math and -ffp-contract=off,
+    # so no float operation is reordered or fused: the output is the same bit for bit. Off by
+    # default until a console A/B (APU voice processing ms/s in [perf]). Changing it does not
+    # rebuild apu_vp.o with the Makefile generator: delete the object or use a new build folder.
+    option(MANHUNT_APU_O3 "compile the APU voice processor at -O3" OFF)
+    if(MANHUNT_APU_O3)
+        set_source_files_properties(${XR}/apu/apu_vp.c PROPERTIES COMPILE_OPTIONS "-O3;-w")
+    endif()
     find_program(MANHUNT_UAM uam HINTS "${DEVKITPRO}/tools/bin" REQUIRED)
     set(MANHUNT_ROMFS "${CMAKE_CURRENT_BINARY_DIR}/nv2a_romfs")
     dkp_add_asset_target(manhunt_romfs "${MANHUNT_ROMFS}")
@@ -149,6 +158,24 @@ endif()
 # Generated code: ~1.5M lines. Switch uses -O2 for the CPU-bound game loop;
 # host bring-up keeps -O1. Warnings are the lifter's, not ours.
 set_source_files_properties(${MANHUNT_GEN_SOURCES} PROPERTIES COMPILE_OPTIONS "-w;${MANHUNT_GEN_OPT}")
+# Profile-guided optimisation (Switch). generate: an instrumented NRO that streams its counts to
+# sdmc:/switch/manhunt1_nx/pgo (src/pgo_stream.c); tools/pgo_merge.py turns them into .gcda files in
+# MANHUNT_PGO_DIR. use: the optimised NRO. Generate and use must be the SAME build folder and the same
+# absolute paths (the .gcda names hold the object paths): build/switch-pgo inside the toolchain container.
+set(MANHUNT_PGO "" CACHE STRING "Profile-guided optimisation: generate, use, or empty")
+set(MANHUNT_PGO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/pgo-data" CACHE PATH "Folder of the .gcda files")
+if(NINTENDO_SWITCH AND MANHUNT_PGO STREQUAL "generate")
+    target_compile_options(manhunt PRIVATE -fprofile-generate=${MANHUNT_PGO_DIR} -fprofile-update=single
+        -fno-profile-values -fprofile-info-section=gcov_info)
+    target_compile_definitions(manhunt PRIVATE MANHUNT_PGO_GENERATE=1)
+    target_link_options(manhunt PRIVATE -fprofile-generate=${MANHUNT_PGO_DIR})
+    target_sources(manhunt PRIVATE src/pgo_stream.c)
+elseif(NINTENDO_SWITCH AND MANHUNT_PGO STREQUAL "use")
+    target_compile_options(manhunt PRIVATE -fprofile-use=${MANHUNT_PGO_DIR} -fprofile-correction
+        -fprofile-partial-training -fno-profile-values -Wno-missing-profile -Wno-coverage-mismatch)
+elseif(NOT MANHUNT_PGO STREQUAL "")
+    message(FATAL_ERROR "MANHUNT_PGO must be generate, use, or empty (Switch only)")
+endif()
 # Investigation builds only: sampling time profile of the lifted code (src/call_profile.c).
 option(MANHUNT_CALL_PROFILE "sample lifted call stacks and print the hottest functions every 10 s" OFF)
 if(MANHUNT_CALL_PROFILE)

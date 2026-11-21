@@ -85,6 +85,14 @@ The output is `game/build/switch/manhunt.nro`. Leave out `MSYS_NO_PATHCONV=1` on
 
 The toolchain image is pinned: `devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282`.
 
+Optional build variants, all off by default and all UNVERIFIED for speed on the console (`reports/PGO_APU_2026-11-21.md`):
+
+| CMake setting | Effect |
+|---|---|
+| `-DMANHUNT_GEN_OPT=-Os` | Lifted code optimised for size |
+| `-DMANHUNT_PGO=generate`, then `use` | Profile-guided optimisation: the instrumented NRO streams its counts to `switch/manhunt1_nx/pgo/` on the card; `python tools/pgo_merge.py <folder with the .stream files>` turns them into the profile for the `use` build. Both must be built in the same folder (`game/build/switch-pgo`) |
+| `-DMANHUNT_APU_O3=ON` | The audio emulator's voice path at `-O3` (vectorised; same output bit for bit) |
+
 ## Install and run
 
 You need a homebrew-capable Switch and your own copy of Manhunt for the original Xbox (a disc image or the extracted files).

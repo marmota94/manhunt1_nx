@@ -464,6 +464,12 @@ static void on_sigabrt(int sig)
     svcExitProcess();
 }
 
+#ifdef MANHUNT_PGO_GENERATE
+/* src/pgo_stream.c (-DMANHUNT_PGO=generate) */
+void manhunt_pgo_start(void);
+void manhunt_pgo_snapshot(const char *why);
+#endif
+
 /* MANHUNT_AUTO_EXIT_SECS=N: end the run after N seconds, for runs with nobody at the console. Restarting the title
  * is what can bring the launcher back; whether it does depends on the console's title-override setup. If the restart
  * returns or does nothing, the process exits. Guest threads are still running, so this never calls exit(). */
@@ -471,6 +477,9 @@ static void auto_exit_main(void *arg)
 {
     const int secs = (int)(intptr_t)arg;
     svcSleepThread((s64)secs * 1000000000ll);
+#ifdef MANHUNT_PGO_GENERATE
+    manhunt_pgo_snapshot("auto exit");
+#endif
     exit_note("auto exit, restarting the title", secs);
     const Result rc = appletRestartProgram(NULL, 0);
     svcSleepThread(5000000000ll);
@@ -1191,6 +1200,9 @@ int main(int argc, char **argv)
     log_init();
     printf("[MH-BOOT] start (Horizon) game_dir=%s\n", GAME_DIR);
     config_init();
+#ifdef MANHUNT_PGO_GENERATE
+    manhunt_pgo_start();
+#endif
     /* KEY=VALUE arguments override manhunt.env: "nxlink manhunt.nro KEY=VALUE ..."
      * runs a test configuration without touching the card. */
     for (int i = 1; i < argc; i++) {
