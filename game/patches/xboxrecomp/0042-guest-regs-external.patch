@@ -1,0 +1,57 @@
+diff --git a/src/kernel/xbox_memory_layout.c b/src/kernel/xbox_memory_layout.c
+--- a/src/kernel/xbox_memory_layout.c
++++ b/src/kernel/xbox_memory_layout.c
+@@ -1818,8 +1818,13 @@
+  * at is. Zero total means the image had no TLS directory. */
+ static uint32_t g_tls_template_va, g_tls_total, g_tls_thread_size = 64;
+ 
++#ifndef RECOMP_GUEST_REGS_EXTERNAL /* the game defines them in one TLS block (game/src/guest_regs.S) */
+ RECOMP_TLS uint32_t g_eax = 0, g_ecx = 0, g_edx = 0, g_esp = 0;
+ RECOMP_TLS uint32_t g_ebx = 0, g_esi = 0, g_edi = 0;
++#else
++extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp;
++extern RECOMP_TLS uint32_t g_ebx, g_esi, g_edi;
++#endif
+ 
+ #ifdef RECOMP_ABI_CHECK
+ /* Report a lifted function that returned without restoring ebx/esi/edi.
+@@ -1881,9 +1886,15 @@
+ #endif
+ 
+ /* SEH frame pointer bridge (see recomp_types.h for explanation) */
++#ifndef RECOMP_GUEST_REGS_EXTERNAL /* the game defines them in one TLS block (game/src/guest_regs.S) */
+ RECOMP_TLS uint32_t g_seh_ebp = 0;
+ RECOMP_TLS double g_fp_stack[8];
+ RECOMP_TLS int g_fp_top = 0;
++#else
++extern RECOMP_TLS uint32_t g_seh_ebp;
++extern RECOMP_TLS double g_fp_stack[8];
++extern RECOMP_TLS int g_fp_top;
++#endif
+ 
+ /* Set once at startup. The generated code reads it at the ret of every
+  * --force-return function, so it has to be cheap and it has to default to
+@@ -2618,7 +2629,11 @@
+ RECOMP_TLS RecompXmm g_xmm4, g_xmm5, g_xmm6, g_xmm7;
+ /* Last frame established by `mov ebp, esp`. Read by frameless functions
+  * that address their caller's frame through ebp. */
++#ifndef RECOMP_GUEST_REGS_EXTERNAL /* the game defines them in one TLS block (game/src/guest_regs.S) */
+ RECOMP_TLS uint32_t g_ebp = 0;
++#else
++extern RECOMP_TLS uint32_t g_ebp;
++#endif
+ 
+ /* EFLAGS.DF. Zero means the string instructions walk forwards, which is the
+  * ABI's resting state and what almost every one of them does -- so this is
+@@ -2627,7 +2642,11 @@
+  * `std; repne scasb`, and memmove goes backwards when its regions overlap the
+  * wrong way. Thread-local, because `std` and the `cld` that undoes it can land
+  * in different lifted bodies of the same guest routine. */
++#ifndef RECOMP_GUEST_REGS_EXTERNAL /* the game defines them in one TLS block (game/src/guest_regs.S) */
+ RECOMP_TLS int g_df = 0;
++#else
++extern RECOMP_TLS int g_df;
++#endif
+ /* EFLAGS: the image pushfd and popfd use (see recomp_types.h). Bit 1 is
+  * always set and IF is on, as in any guest thread the kernel schedules. */
+ RECOMP_TLS uint32_t g_eflags = 0x00000202u;

@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.20)
 # Built by scripts/game-build.sh. Inputs:
 #   XBOXRECOMP_DIR  patched copy of xboxrecomp (game/patches/xboxrecomp/*.patch)
 #   MANHUNT_GEN_DIR lifted C from tools.recomp (game-derived: gitignored)
-project(manhunt_recomp C)
+project(manhunt_recomp C ASM)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -55,6 +55,7 @@ if(NINTENDO_SWITCH)
     )
     add_executable(manhunt
         src/main_switch.c
+        src/guest_regs.S
         src/pad_switch.c
         src/pad_script.c
         src/horizon_compat.c
@@ -84,7 +85,8 @@ if(NINTENDO_SWITCH)
         ${XR} ${XR}/kernel ${XR}/platform ${XR}/nv2a ${XR}/apu ${XR}/d3d ${XR}/audio
         ${XR}/input ${XR}/usb ${XR}/video
     )
-    target_compile_definitions(manhunt PRIVATE MANHUNT_HORIZON=1)
+    # Guest registers in one TLS block (src/guest_regs.S, patch 0042, scripts/post-lift.py).
+    target_compile_definitions(manhunt PRIVATE MANHUNT_HORIZON=1 RECOMP_GUEST_REGS_EXTERNAL=1)
     target_compile_options(manhunt PRIVATE -g -fno-strict-aliasing -ffp-contract=off)
     target_link_libraries(manhunt PRIVATE deko3d SDL2 EGL glapi drm_nouveau stdc++)
     # No tiled aperture on Horizon: D3DLOCK_TILED locks get the contiguous
@@ -129,9 +131,13 @@ if(NINTENDO_SWITCH)
     endif()
 else()
     add_subdirectory(${XBOXRECOMP_DIR} ${CMAKE_BINARY_DIR}/xboxrecomp)
+    # The guest registers live in src/guest_regs.S on the host too, because the lifted
+    # chunks are shared with the Switch build (scripts/post-lift.py, patch 0042).
+    target_compile_definitions(xbox_kernel PRIVATE RECOMP_GUEST_REGS_EXTERNAL=1)
     add_executable(manhunt
         src/main.c
         src/pad_script.c
+        src/guest_regs.S
         ${MANHUNT_GAME_SOURCES}
         ${MANHUNT_GEN_SOURCES}
     )
